@@ -1,0 +1,59 @@
+services:
+  # Zookeeper que colaborará com o container broker01
+  zookeeper:
+    container_name: zookeeper
+    image: confluentinc/cp-zookeeper:7.1.1
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+  # Exporter de métricas do Zookeeper no formato Prometheus
+  zookeeper-exporter:
+    container_name: zookeeper-exporter
+    image: carlpett/zookeeper_exporter
+    depends_on:
+      - zookeeper
+    ports:
+      - 9141:9141
+  # Broker do Kafka
+  broker01:
+    container_name: broker01
+    image: confluentinc/cp-kafka:7.1.1
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_HOST://broker01:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+  # Exporer de métricas do Kafka no formato Prometheus
+  kafka-exporter:
+    container_name: kafka-exporter
+    image: danielqsj/kafka-exporter
+    depends_on:
+      - broker01
+    ports:
+      - 9308:9308
+    command: ["--kafka.server=broker01:29092"]
+  # Aplicação web que possibilita ações de gerenciamento do ecossistema Kafka
+  kafka-ui:
+    container_name: kafka-ui
+    image: provectuslabs/kafka-ui:latest
+    ports:
+      - 8080:8080
+    depends_on:
+      - zookeeper
+      - broker01
+    environment:
+      KAFKA_CLUSTERS_0_NAME: kafka-ui-1
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: broker01:29092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+      KAFKA_CLUSTERS_0_JMXPORT: 9997
+  # Instância de Prometheus que fará a coleta de métrica de outros containeres
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - 9090:9090
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
